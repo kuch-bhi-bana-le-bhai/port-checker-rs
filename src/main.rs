@@ -1,7 +1,13 @@
 use std::env;
-use std::net::IpAddr;
+use std::net::{IpAddr, TcpStream, SocketAddr};
+use std::io::{self, Write};
 use std::str::FromStr;
 use std::process;
+use std::sync::mpsc::{Sender, channel};
+use std::thread;
+use std::time::Duration;
+
+const MAX_PORT: u16 = 65535;
 
 #[derive(Debug)]
 struct Arguements {
@@ -56,6 +62,33 @@ impl Arguements {
     }
 }
 
+
+fn scan(tx: Sender<u16>, start_port: u16, addr: IpAddr, num_threads: u16) {
+    let mut port: u16 = start_port + 1;
+    loop {
+        let sock_addr = SocketAddr::new(addr, port);
+        let timeout: Duration = Duration::from_millis(200);
+        match TcpStream::connect_timeout(&sock_addr, timeout) {
+            Ok(_) => {
+                print!(".");
+                io::stdout().flush().unwrap();
+                tx.send(port).unwrap();
+            }
+            Err(_) => {
+                // print!("x");
+                // io::stdout().flush().unwrap();
+            }
+        };
+
+        if MAX_PORT - port <= num_threads {
+            break;
+        }
+
+        port += num_threads;
+
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -67,5 +100,31 @@ fn main() {
             process::exit(1);
         }
     });
-    println!("Running {} with :: Arguements({:?})", program, arguements);
+    println!("Debug :: Running {} with :: Arguements({:?})", program, arguements);
+
+    let num_of_threads: u16 = arguements.threads;
+    let addr = arguements.ipaddr;
+
+    let (tx, rx) = channel();
+
+    for i in 0 .. num_of_threads {
+        let tx = tx.clone();
+
+        thread::spawn(move || {
+            scan(tx, i, addr, num_of_threads);
+        });
+    }
+
+    let mut out: Vec<u16> = vec![];
+    drop(tx);
+    for p in rx {
+        out.push(p);
+    }
+
+    println!("");
+    out.sort();
+    for v in out {
+        println!("port {} is open!", v);
+    }
+
 }
