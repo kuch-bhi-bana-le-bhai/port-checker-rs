@@ -121,7 +121,7 @@ fn main() {
         out.push(p);
     }
 
-    println!("");
+    println!();
     out.sort();
     for v in out {
         println!("port {} is open!", v);
